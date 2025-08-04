@@ -4,7 +4,7 @@
  * Node.js Express সার্ভার যা Email ও OTP গ্রহণ করবে।
  * Email sanitization করবে sheet name হিসেবে এবং
  * Google Sheets থেকে email ও otp মিলিয়ে ভ্যালিডেশন করবে।
- * যদি মিলবে, তাহলে response দেবে redirect করার জন্য,
+ * যদি মিলবে, তাহলে সফল response দিবে,
  * না হলে error message পাঠাবে।
  */
 
@@ -41,6 +41,7 @@ const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 
 /**
  * Email sanitization: sheet name হিসেবে ব্যবহার করার জন্য special character গুলো "_" দিয়ে রিপ্লেস করা হয়।
+ * যেমন: user@example.com -> user_example_com
  */
 function sanitizeSheetName(email) {
   return email.replace(/[^a-zA-Z0-9]/g, "_");
@@ -50,16 +51,18 @@ function sanitizeSheetName(email) {
  * POST /validate-otp
  * Request body: { email: string, otp: string }
  * Response: 
- *  - সফল হলে: { success: true, redirectUrl: string }
+ *  - সফল হলে: { success: true }
  *  - ব্যর্থ হলে: { success: false, error: string }
  */
 app.post('/validate-otp', async (req, res) => {
   const { email, otp } = req.body;
 
+  // Email ও OTP অবশ্যই দিতে হবে
   if (!email || !otp) {
     return res.status(400).json({ success: false, error: 'Email and OTP are required.' });
   }
 
+  // OTP ৬ অক্ষরের না হলে error দিবে
   if (otp.length !== 6) {
     return res.status(400).json({ success: false, error: 'Please enter the correct OTP.' });
   }
@@ -68,7 +71,7 @@ app.post('/validate-otp', async (req, res) => {
   const sheetName = sanitizeSheetName(email);
 
   try {
-    // sheet এর A1 (email) ও A3 (otp) cell থেকে data পড়া
+    // Google Sheets থেকে sheet এর A1 (email) ও A3 (otp) cell থেকে ডাটা পড়া
     const emailCell = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${sheetName}!A1`,
@@ -84,10 +87,10 @@ app.post('/validate-otp', async (req, res) => {
 
     // আসল Email ও OTP মিলানো (email sanitize নয়)
     if (email === emailInSheet && otp === otpInSheet) {
-      // মিললে সফল response এবং redirect URL পাঠানো (তুমি চাইলে URL environment variable/set করতে পারো)
-      const redirectUrl = process.env.REDIRECT_URL || 'https://your-next-page.com';
-      return res.status(200).json({ success: true, redirectUrl });
+      // মিললে শুধু success: true রেসপন্স দিবে
+      return res.status(200).json({ success: true });
     } else {
+      // না মিললে error রেসপন্স দিবে
       return res.status(401).json({ success: false, error: 'Please enter the correct OTP.' });
     }
 
